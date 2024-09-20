@@ -66,6 +66,95 @@ def call_openai_api(sys_prompt, contents) -> Optional[str]:
     return None
 
 
+def format_prefiltering_prompt(
+    question,
+    class_list,
+    top_k = 10,
+    image_goal = None
+):
+    content = []
+    sys_prompt = "You are an AI agent in a 3D indoor scene.\n"
+    prompt = "The goal of the AI agent is to answer questions about the scene through exploration.\n"
+    prompt += "To efficiently solve the problem, you should first rank objects in the scene based on their importance.\n"
+    # prompt += "You should rank the objects based on how well they can help you answer the question.\n"
+    # prompt += "More important objects should be more helpful in answering the question, and should be ranked higher and first explored.\n"
+    # prompt += f"Only the top {top_k} ranked objects should be included in the response.\n"
+    # prompt += "If there are not enough objects, you only need to rank the objects and return all of them in ranked order.\n" 
+    prompt += "These are the rules for the task.\n"
+    # prompt += "RULES:\n"
+    prompt += "1. Read through the whole object list.\n"
+    prompt += "2. Rank objects in the list based on how well they can help you answer the question.\n"
+    prompt += f"3. Reprint the name of top {top_k} objects. "
+    prompt += "If there are not enough objects, reprint all of them in ranked order. Each object should be printed on a new line.\n"
+    prompt += "4. Do not print any object not included in the list or include any additional information in your response.\n"
+    content.append((prompt,))
+    #------------------format an example-------------------------
+    prompt = "Here is an example of selecting top 3 ranked objects:\n"
+    # prompt += "EXAMPLE: select top 3 ranked objects\n"
+    prompt += "Question: What can I use to watch my favorite shows and movies?\n"
+    prompt += "Following is a list of objects that you can choose, each object one line\n"
+    prompt += "painting\nspeaker\nbox\ncabinet\nlamp\ncouch\npillow\ncabinet\ntv\nbook rack\nwall panel\npainting\nstool\ntv stand\n"
+    prompt += "Answer: tv\ntv stand\nspeaker\n"
+    content.append((prompt,))
+    #------------------Task to solve----------------------------
+    prompt = f"Following is the concrete content of the task and you should retrieve top {top_k} objects:\n"
+    prompt += f"Question: {question}"
+    if image_goal is not None:
+        content.append((prompt, image_goal))
+        content.append(("\n",))
+    else:
+        content.append((prompt+"\n",))
+    prompt = "Following is a list of objects that you can choose, each object one line\n"
+    for i, cls in enumerate(class_list):
+        prompt += f"{cls}\n"
+    prompt += "Answer: "
+    content.append((prompt,))
+    return sys_prompt,content
+
+def get_prefiltering_classes(
+    question,
+    seen_classes,
+    top_k=10,
+    image_goal = None
+): 
+    prefiltering_sys,prefiltering_content = format_prefiltering_prompt(
+        question, sorted(list(seen_classes)), top_k=top_k, image_goal=image_goal)
+    logging.info("prefiltering prompt: \n", "".join([c[0] for c in prefiltering_content]))
+    response = call_openai_api(prefiltering_sys, prefiltering_content)
+    if response is None:
+        return []
+    # parse the response and return the top_k objects
+    selected_classes = response.strip().split('\n')
+    selected_classes = [cls for cls in selected_classes if cls in seen_classes]
+    selected_classes = selected_classes[:top_k]
+    logging.info(f"Prefiltering response: {selected_classes}")
+    return selected_classes
+
+def prefilter_snapshot(
+    question,
+    snapshot,
+    objects_infos,
+    top_k = 10
+):
+    seen_classes = set()
+    for objects_info in objects_infos.values():
+        detected_classes = [obj["class_name"] for obj in objects_info]
+        seen_classes.update(set(detected_classes))
+    selected_classes = get_prefiltering_classes(
+        question, sorted(list(seen_classes)), top_k)
+    print(selected_classes)
+    # filter snapshots and objects with given classes
+    selected_snapshot = {}
+    selected_objects_infos = {}
+    
+    for k in snapshot.keys():
+        selected_objects = [obj for obj in objects_infos[k] if obj["class_name"] in selected_classes]
+        if len(selected_objects) > 0:
+            selected_snapshot[k] = snapshot[k]
+            selected_objects_infos[k] = selected_objects
+    
+    return selected_snapshot, selected_objects_infos
+
 def format_prompt(query, snapshots, objects_infos):
     # Format the prompt
     sys_prompt = "Task: You are an agent in an indoor scene tasked with answering queries by observing the surroundings and exploring the environment. To answer the question, you are required to choose an object from a Snapshot.\n"
@@ -78,46 +167,83 @@ def format_prompt(query, snapshots, objects_infos):
     content.append((text,))
     # 2 here is the query
     text += f"Query: {query}\n"
-    text += "The followings are all the snapshots that you can explore (followed with contained object ids and descriptions)\n"
+    text += "The followings are all the snapshots that you can explore (followed with contained object ids and their descriptions)\n"
     
-    for i, (snapshot, obj_info) in enumerate(zip(snapshots, objects_infos)):
-        content.append(f"Snapshot {i} ", snapshot_imgs[i])
-        # may be revised based on concrete implementation
-        text = ", ".join(obj_info)
-        content.append((text,))
-        content.append(("\n",))
+    for i, frame_key in enumerate(snapshots.keys()):
+        snapshot = snapshots[frame_key]
+        obj_info = objects_infos[frame_key]
+        content.append((f"Snapshot {i} ", snapshot))
+        obj_text = ""
+        for j, obj in enumerate(obj_info):
+            obj_text += f"Object {j} {obj['class_name']}: {obj['caption']}\n"
+        content.append((obj_text,))
     
-    text += "Please choose a snapshot and an object id from the snapshot to help answer the question.\n"
+    text += "Please choose a snapshot and an object from the snapshot to help answer the question.\n"
     text += "The answer should be in the format of 'Snapshot x, Object y', where x is the index of the snapshot and y chosen from the object id following snapshot x\n"
     text += "You can explain the reason for your choice, but put it in a new line after the choice.\n"
     content.append((text,))
     return sys_prompt, content
 
-
-def get_predicted_object_id(query, snapshots):
+def get_predicted_object_id(
+    query, 
+    snapshots, 
+    objects_infos,
+    prefiltering = True,
+    top_k = 10
+    ):
+    # filter given objects
+    print(query)
+    print(f"total objects {sum(len(obj_infos) for obj_infos in objects_infos.values())}")
+    if prefiltering:
+        snapshots, objects_infos = prefilter_snapshot(query, snapshots, objects_infos, top_k)
+        print(f"total objects after prefiltering {sum(len(obj_infos) for obj_infos in objects_infos.values())}")
     # Get the predicted object id
-    sys_prompt, contents = format_prompt(query, snapshots)
-    response = call_openai_api(sys_prompt, contents)
+    sys_prompt, content = format_prompt(query, snapshots, objects_infos)
+    #print(f"the input prompt:\n{sys_prompt + ''.join([c[0] for c in content])}")
+    response = call_openai_api(sys_prompt, content)
     
     # parse the response
     
     response = response.strip()
     retry_limit = 3
-    object_id = None
-    for _ in range(retry_limit):
+    snapshot_id, object_id = None, None
+    pred_bbox = None
+    while (retry_limit > 0):
         if "\n" in response:
             response = response.split("\n")
             response, reason = response[0], response[1] 
         else:
             reason = None
         response = response.lower()
+        print(response)
+        print(f"reason for response {reason}")
         try:
             snapshot_id, object_id = response.split(", ")
-            snapshot_id = int(snapshot_id.split(" ")[-1])
-            object_id = int(object_id.split(" ")[-1])
+            snapshot_id = snapshot_id.split(" ")
+            object_id = object_id.split(" ")
+        except:
+            print("Invalid response, please try again")
+            retry_limit -= 1
+            continue
+
+        if snapshot_id[0] == "snapshot" and 0 <= int(snapshot_id[1]) < len(snapshots):
+            snapshot_id = int(snapshot_id[1])
+        else:
+            print("Invalid snapshot response, please try again")
+            retry_limit -= 1
+            continue
+        frame_key = list(snapshots.keys())[snapshot_id]
+        if object_id[0] == "object" and 0 <= int(object_id[1]) < len(objects_infos[frame_key]):
+            object_id = int(object_id[1])
+            print("object class name: ", objects_infos[frame_key][object_id]["class_name"])
+            pred_bbox = objects_infos[frame_key][object_id]["bbox"]
+        else:
+            print("Invalid object response, please try again")
+            retry_limit -= 1
+            continue
         
-        # may add some validation check here
-        if object_id is not None:
-            break
-        
-    return object_id
+        break
+    
+    # get the corresponding object bounding box based on the object id
+    return pred_bbox
+    
