@@ -7,6 +7,7 @@ import os
 import time
 from typing import Optional
 import logging
+from two_stage_prompt import *
 
 client = AzureOpenAI(
     azure_endpoint="https://yuncong.openai.azure.com/",
@@ -157,18 +158,18 @@ def prefilter_snapshot(
 
 def format_prompt(query, snapshots, objects_infos):
     # Format the prompt
-    sys_prompt = "Task: You are an agent in an indoor scene tasked with answering queries by observing the surroundings and exploring the environment. To answer the question, you are required to choose an object from a Snapshot.\n"
+    sys_prompt = "Task: You are an agent in an indoor scene tasked with responding queries by observing the surroundings and exploring the environment. you are required to choose the queried object from a Snapshot.\n"
     content = []
     
     # 1 list basic info
     text = "Definitions:\n"
-    text += "Snapshot: A focused observation of several objects. Choosing a snapshot means that you are selecting the observed objects in the snapshot as the target objects to help answer the question.\n"
+    text += "Snapshot: A focused observation of several objects. Choosing a snapshot means that you are selecting the observed objects in the snapshot as the target objects the user queried.\n"
     text += "Each snapshot would be followed by a list of object ids and their corresponding descriptions.\n"  
     content.append((text,))
     # 2 here is the query
-    text += f"Query: {query}\n"
+    text = f"Query: Find the object describe as \'{query}\'\n"
     text += "The followings are all the snapshots that you can explore (followed with contained object ids and their descriptions)\n"
-    
+    content.append((text,))
     for i, frame_key in enumerate(snapshots.keys()):
         snapshot = snapshots[frame_key]
         obj_info = objects_infos[frame_key]
@@ -176,20 +177,23 @@ def format_prompt(query, snapshots, objects_infos):
         obj_text = ""
         for j, obj in enumerate(obj_info):
             obj_text += f"Object {j} {obj['class_name']}: {obj['caption']}\n"
+            #obj_text += f"Object {j} {obj['class_name']}, "
         content.append((obj_text,))
     
-    text += "Please choose a snapshot and an object from the snapshot to help answer the question.\n"
+    text = "Please choose a snapshot and an object from the snapshot to answer the query.\n"
+    #text += "To approach this query, you can first choose a snapshot and then choose an object from the snapshot based on visual information and text descriptions.\n"
     text += "The answer should be in the format of 'Snapshot x, Object y', where x is the index of the snapshot and y chosen from the object id following snapshot x\n"
-    text += "You can explain the reason for your choice, but put it in a new line after the choice.\n"
+    text += "Explain the reason for your choice, put it in a new line after the choice.\n"
     content.append((text,))
     return sys_prompt, content
+
 
 def get_predicted_object_id(
     query, 
     snapshots, 
     objects_infos,
     prefiltering = True,
-    top_k = 10
+    top_k = 5
     ):
     # filter given objects
     print(query)
@@ -199,19 +203,19 @@ def get_predicted_object_id(
         print(f"total objects after prefiltering {sum(len(obj_infos) for obj_infos in objects_infos.values())}")
     # Get the predicted object id
     sys_prompt, content = format_prompt(query, snapshots, objects_infos)
-    #print(f"the input prompt:\n{sys_prompt + ''.join([c[0] for c in content])}")
+    print(f"the input prompt:\n{sys_prompt + ''.join([c[0] for c in content])}")
     response = call_openai_api(sys_prompt, content)
     
     # parse the response
     
     response = response.strip()
     retry_limit = 3
-    snapshot_id, object_id = None, None
+    snapshot_id, object_id, frame_key = None, None, None
     pred_bbox = None
     while (retry_limit > 0):
         if "\n" in response:
             response = response.split("\n")
-            response, reason = response[0], response[1] 
+            response, reason = response[0], response[-1] 
         else:
             reason = None
         response = response.lower()
@@ -245,5 +249,84 @@ def get_predicted_object_id(
         break
     
     # get the corresponding object bounding box based on the object id
-    return pred_bbox
+    return pred_bbox, frame_key
+
+def parse_response_with_reason(response):
+    response = response.strip()
+    if "\n" in response:
+            response = response.split("\n")
+            response, reason = response[0], response[-1] 
+    else:
+        reason = None
+    response = response.lower()
+    print(response)
+    print(f"reason for response {reason}")
+    return response
+
+def get_predicted_object_id2(
+    query, 
+    snapshots, 
+    objects_infos,
+    prefiltering = True,
+    top_k = 5
+    ):
+    # filter given objects
+    print(query)
+    print(f"total objects {sum(len(obj_infos) for obj_infos in objects_infos.values())}")
+    if prefiltering:
+        snapshots, objects_infos = prefilter_snapshot(query, snapshots, objects_infos, top_k)
+        print(f"total objects after prefiltering {sum(len(obj_infos) for obj_infos in objects_infos.values())}")
+    # Get the predicted object id
+    sys_prompt, content = format_snapshot_prompt(query, snapshots, objects_infos)
+    print(f"the input prompt:\n{sys_prompt + ''.join([c[0] for c in content])}")
+    response = call_openai_api(sys_prompt, content)
     
+    # parse the response
+    
+    response = response.strip()
+    retry_limit = 3
+    snapshot_id = None
+    while (retry_limit > 0):
+        response = parse_response_with_reason(response)
+        try:
+            snapshot_id = response.split(" ")
+        except:
+            print("Invalid response, please try again")
+            retry_limit -= 1
+            continue
+        
+        if snapshot_id[0] == "snapshot" and 0 <= int(snapshot_id[1]) < len(snapshots):
+            snapshot_id = int(snapshot_id[1])
+            break
+        retry_limit -= 1
+    
+    frame_key = list(snapshots.keys())[snapshot_id]
+    snapshot = snapshots[frame_key]
+    objects_info = objects_infos[frame_key]
+    sys_prompt, content = format_object_prompt(query, snapshot, objects_info)
+    
+    print(f"the input prompt:\n{sys_prompt + ''.join([c[0] for c in content])}")
+    response = call_openai_api(sys_prompt, content)
+    
+    # parse the response
+    
+    retry_limit = 3
+    object_id = None
+    pred_bbox = None
+    while (retry_limit > 0):
+        response = parse_response_with_reason(response)
+        try:
+            object_id = response.split(" ")
+        except:
+            print("Invalid response, please try again")
+            retry_limit -= 1
+            continue
+        
+        if object_id[0] == "object" and 0 <= int(object_id[1]) < len(objects_info):
+            object_id = int(object_id[1])
+            break
+        
+        retry_limit -= 1
+    
+    # get the corresponding object bounding box based on the object id
+    return objects_info[object_id]["bbox"], frame_key

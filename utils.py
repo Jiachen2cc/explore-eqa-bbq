@@ -17,8 +17,8 @@ def iou_bbox(pred_bbox, tar_bbox, threshold = 0.1, oriented = False):
         ...
     # 2. if iou > threshold, return True, else return False
     print("iou",iou)  
-    exit(0)
-    return ...
+    #exit(0)
+    return iou
 
 def oriented_to_raw_bbox(bbox):
     # 1. convert the oriented bbox to raw bbox
