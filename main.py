@@ -14,6 +14,9 @@ def main():
     parser.add_argument('--scene_data_dir', type=str, 
                         default='/project/pi_chuangg_umass_edu/yuncong/scene_data_scannet_retrieval/',
                         help = "the source directory of the scene data")
+    parser.add_argument("--frame_dir", type = str,
+                        default='/project/pi_chuangg_umass_edu/yuncong/OpenEqa/scannet/frames_bbq/',
+                        help = "the directory for the frames")
     parser.add_argument('--query_data_dir', type=str, 
                         default='query/scannet_eval/nr3d_all_types_of_queries',
                         help = "the source directory of the query data")
@@ -26,7 +29,9 @@ def main():
                         action='store_true',
                         help='whether to use oriented bounding box')
     parser.add_argument('--annotation_dir', type = str,
-                        default = '/project/pi_chuangg_umass_edu/yuncong/OpenEqa/scannet/scans',)
+                        default = '/project/pi_chuangg_umass_edu/yuncong/OpenEqa/scannet/scans')
+    parser.add_argument('--visualization_dir', type = str,
+                        default = '/project/pi_chuangg_umass_edu/yuncong/results/bbq_debug')
     
     args = parser.parse_args()
     with open(args.bbox_data_dir, 'r') as f:
@@ -38,6 +43,7 @@ def main():
             continue
         gt_bbox = bbox_data[scene_id]
         scene = Scene(os.path.join(args.scene_data_dir, scene_dir),
+                os.path.join(args.frame_dir, scene_dir),
                 os.path.join(args.annotation_dir, scene_id))
         scene.load_scene()
     
@@ -52,7 +58,13 @@ def main():
             target_id = query['target_id']
             print(f"Query: {query['utterance']}")
             print(f"Target object id: {target_id}")
-            pred_bbox = get_predicted_object_id2(query['utterance'], scene.snapshot, scene.snapshot_objects)
+            pred_bbox, frame_key = get_predicted_object_id(
+                query['utterance'], scene.snapshot, scene.snapshot_objects, 
+                True, 5
+            )
+            scene.check_annonation(frame_key, 
+                    target_id, gt_bbox[str(target_id)]['label'],
+                    query_count, query['utterance'])
             #print(pred_bbox)
             #pred_bbox = list(scene.snapshot_objects.values())[0][0]['bbox']
             #print(pred_bbox)
