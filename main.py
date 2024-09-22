@@ -21,7 +21,7 @@ def main():
                         default='query/scannet_eval/nr3d_all_types_of_queries',
                         help = "the source directory of the query data")
     parser.add_argument('--bbox_data_dir', type=str, 
-                        default='/project/pi_chuangg_umass_edu/yuncong/OpenEqa/scannet/scannet_bbox.json',
+                        default='/project/pi_chuangg_umass_edu/yuncong/OpenEqa/scannet/scannet_bbox_clean.json',
                         help = "the source directory of the groundtruth bbox data")
     parser.add_argument('--snapshot_data_dir', type=str, default='data',
                         help = "the source directory of the snapshot data")
@@ -44,7 +44,8 @@ def main():
         gt_bbox = bbox_data[scene_id]
         scene = Scene(os.path.join(args.scene_data_dir, scene_dir),
                 os.path.join(args.frame_dir, scene_dir),
-                os.path.join(args.annotation_dir, scene_id))
+                os.path.join(args.annotation_dir, scene_id),
+                args.visualization_dir)
         scene.load_scene()
     
         # 3 get query, snapshot, object_id and format the prompt
@@ -53,11 +54,16 @@ def main():
             query_data = json.load(f)
         # 4 send prompt to LLM, get the predicted object id
         success_count, query_count = 0, 0
-        for query in tqdm(query_data):
+        for query in tqdm(query_data[0:1]):
             query_count += 1
             target_id = query['target_id']
             print(f"Query: {query['utterance']}")
             print(f"Target object id: {target_id}")
+            scene.get_possible_query_answer(
+                query['utterance'], query_count,
+                0, gt_bbox[str(target_id)]['label']
+            )
+            exit(0)
             pred_bbox, frame_key = get_predicted_object_id(
                 query['utterance'], scene.snapshot, scene.snapshot_objects, 
                 True, 5
