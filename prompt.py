@@ -164,7 +164,8 @@ def format_prompt(query, snapshots, objects_infos):
     # 1 list basic info
     text = "Definitions:\n"
     text += "Snapshot: A focused observation of several objects. Choosing a snapshot means that you are selecting the observed objects in the snapshot as the target objects the user queried.\n"
-    text += "Each snapshot would be followed by a list of object ids and their corresponding descriptions.\n"  
+    text += "Each snapshot would be followed by a list of object ids and their corresponding descriptions.\n" 
+    text += "You should NOT choose a snapshot if it visually contains the queried object but its object list does not have it\n" 
     content.append((text,))
     # 2 here is the query
     text = f"Query: Find the object describe as \'{query}\'\n"

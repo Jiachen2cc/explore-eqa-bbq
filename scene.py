@@ -43,12 +43,12 @@ class Scene:
         frame_id = frame_key[5:-4]
         frame_path = os.path.join(self.frame_dir,f"{frame_id}-rgb.png")
         detection_path = os.path.join(self.scene_dir,'gsa_vis_ram_withoutbg_allclasses_stride10',frame_key)
-        annotation_path = os.path.join(self.annotation_dir,'instance',f"{int(frame_id)}.png")
+        annotation_path = os.path.join(self.annotation_dir,'instance-filt',f"{int(frame_id)}.png")
         
         frame_img = mpimg.imread(frame_path)
         detection_img = mpimg.imread(detection_path)
         annotation_img = Image.open(annotation_path)
-        annotation_img = (np.array(annotation_img) == target_id).astype(np.uint8)
+        annotation_img = (np.array(annotation_img) == (target_id + 1)).astype(np.uint8)
         
         fig, axes = plt.subplots(1,3,
                     figsize=(15, 5), dpi = 600)
@@ -88,10 +88,10 @@ class Scene:
             frame_id = frame_key[5:-4]
             frame_path = os.path.join(self.frame_dir,f"{frame_id}-rgb.png")
             detection_path = os.path.join(self.scene_dir,'gsa_vis_ram_withoutbg_allclasses_stride10',frame_key)
-            annotation_path = os.path.join(self.annotation_dir,'label-filt',f"{int(frame_id)}.png")
+            annotation_path = os.path.join(self.annotation_dir,'instance-filt',f"{int(frame_id)}.png")
             
             annotation_img = Image.open(annotation_path)
-            annotation_img = (np.array(annotation_img) == target_id).astype(np.uint8)
+            annotation_img = (np.array(annotation_img) == (target_id+1)).astype(np.uint8)
             if np.sum(annotation_img) > 0:
                 candidate_count += 1
                 detection_img = mpimg.imread(detection_path)
