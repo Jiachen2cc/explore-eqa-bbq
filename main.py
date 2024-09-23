@@ -92,6 +92,8 @@ def main(cfg):
         # 7 summary the results for all queries
         overall_record[scene_id] = scene_record
         overall_result = merge_results(cfg.output_dir)
+        print('===================OVERALL SUMMARY====================')
+        print(overall_result)
         
         
     return overall_result

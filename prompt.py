@@ -234,14 +234,14 @@ def get_predicted_object_id(
             retry_limit -= 1
             continue
 
-        if snapshot_id[0] == "snapshot" and 0 <= int(snapshot_id[1]) < len(snapshots):
+        if snapshot_id[0] == "snapshot" and snapshot_id[1].isdigit() and 0 <= int(snapshot_id[1]) < len(snapshots):
             snapshot_id = int(snapshot_id[1])
         else:
             print("Invalid snapshot response, please try again")
             retry_limit -= 1
             continue
         frame_key = list(snapshots.keys())[snapshot_id]
-        if object_id[0] == "object" and 0 <= int(object_id[1]) < len(objects_infos[frame_key]):
+        if object_id[0] == "object" and object_id[1].isdigit() and 0 <= int(object_id[1]) < len(objects_infos[frame_key]):
             object_id = int(object_id[1])
             print("object class name: ", objects_infos[frame_key][object_id]["class_name"])
             pred_bbox = objects_infos[frame_key][object_id]["bbox"]
