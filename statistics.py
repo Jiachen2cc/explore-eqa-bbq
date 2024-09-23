@@ -1,5 +1,6 @@
 import pandas as pd 
 import json
+import os
 
 def extract_scene_id(stimulus_id):
     return stimulus_id.split('-')[0]
@@ -72,9 +73,38 @@ def check_sr3d():
                     print(f"scannet label: {subbbox[target_id]['label']}")
                     print(f"sr3d+ label: {instance_target_dict[int(target_id)]}")
                     exit(0)
+
+def merge_results(meta_folder):
+    
+    records = []
+    count_key = ['succ01_count', 'succ025_count', 'overall_count']
+    for scene in os.listdir(meta_folder):
+        if not os.path.isdir(os.path.join(meta_folder, scene)):
+            continue
+        scene_record = pd.read_csv(os.path.join(meta_folder, scene, 'record.csv'))
+        scene_record['scene_id'] = scene
+        records.append(scene_record)
+    sum_records = records[0].copy()
+    for record in records[1:]:
+        sum_records[count_key]  += record[count_key]
+    sum_records['acc01'] = sum_records['succ01_count'] / sum_records['overall_count']
+    sum_records['acc025'] = sum_records['succ025_count'] / sum_records['overall_count']
+    sum_records['scene_id'] = 'overall'
+    
+    records.append(sum_records)
+    df = pd.concat(records)
+    df.to_csv(os.path.join(meta_folder, 'meta_record.csv'))
+    
+    return sum_records
+
+def reformat_sr3d()
+        
     
 
 if __name__ == "__main__":
-    check_nr3d()
-    check_sr3d()
+    #check_nr3d()
+    #check_sr3d()
+    
+    merge_results('/work/pi_chuangg_umass_edu/yuncong/results/bbq_debug')
+    
     

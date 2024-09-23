@@ -6,22 +6,30 @@ from prompt import get_predicted_object_id, get_predicted_object_id2
 import json
 from tqdm import tqdm
 from omegaconf import OmegaConf
+from statistics import merge_results
 
 
 def main(cfg):
     
     with open(cfg.bbox_data_dir, 'r') as f:
         bbox_data = json.load(f)
+        
+    overall_record = {}
     # 2 construct the scene
     for scene_dir in os.listdir(cfg.scene_data_dir):
         scene_id = scene_dir.split('-')[-1]
-        if scene_id != "scene0030_00":
+        if scene_id == 'scene0011_00':
             continue
+        scene_out_dir = os.path.join(cfg.output_dir, scene_id)
+        if not os.path.exists(scene_out_dir):
+            os.makedirs(scene_out_dir)
+        print(f"=====================Scene {scene_id}=====================")
+        scene_record = initialize_count(cfg.query_set)
         gt_bbox = bbox_data[scene_id]
         scene = Scene(os.path.join(cfg.scene_data_dir, scene_dir),
                 os.path.join(cfg.frame_dir, scene_dir),
                 os.path.join(cfg.annotation_dir, scene_id),
-                os.path.join(cfg.output_dir, cfg.visualization_dir, scene_id))
+                os.path.join(cfg.output_dir, scene_id, cfg.visualization_dir))
         scene.load_scene()
     
         # 3 get query, snapshot, object_id and format the prompt
@@ -30,7 +38,7 @@ def main(cfg):
             query_data = json.load(f)
         # 4 send prompt to LLM, get the predicted object id
         success_count, query_count = 0, 0
-        for query in tqdm(query_data[0:10]):
+        for query in tqdm(query_data):
             query_count += 1
             target_id = query['target_id']
             print(f"Query: {query['utterance']}")
@@ -45,38 +53,49 @@ def main(cfg):
                 query['utterance'], scene.snapshot, scene.snapshot_objects, 
                 True, 5
             )
-            if cfg.save_visualization:
-                scene.check_annonation(frame_key, 
-                        target_id, gt_bbox[str(target_id)]['label'],
-                        query_count, query['utterance'])
-                
-            # 5 extract the predicted bbox and compare with gt_bbox
-            tar_bbox = gt_bbox[str(target_id)]['bbox']
-            if not args.bbox_oriented:
-                pred_bbox = oriented_to_raw_bbox(pred_bbox)
-                tar_bbox = center_bbox_to_raw_bbox(tar_bbox)
-                print("predicted_object: ", pred_bbox)
-                print("target_object: ", tar_bbox)
-            target_class = gt_bbox[str(target_id)]['label']
-            print("Target class: ", target_class)
-            '''
-            for gt_id in gt_bbox.keys():
-                if gt_bbox[gt_id]['label'] == target_class:
-                    print("possible groundtruth_object: ", center_bbox_to_raw_bbox(gt_bbox[gt_id]['bbox']))
-            for fkey in scene.snapshot.keys():
-                for obj in scene.snapshot_objects[fkey]:
-                    if obj['class_name'] == 'chair': #gt_bbox[str(target_id)]['label']:
-                        print("candidate_detected_object: ", oriented_to_raw_bbox(obj['bbox']))
-            '''
-            # 6 store the results for this query 
-            if iou_bbox(pred_bbox, tar_bbox) > 0.1:
-                success_count += 1
-            print("Success rate: ", success_count/query_count)
+            if pred_bbox is not None:
+                if cfg.save_visualization:
+                    scene.check_annonation(frame_key, 
+                            target_id, gt_bbox[str(target_id)]['label'],
+                            query_count, query['utterance'])
+                    
+                # 5 extract the predicted bbox and compare with gt_bbox
+                tar_bbox = gt_bbox[str(target_id)]['bbox']
+                if not cfg.bbox_oriented:
+                    pred_bbox = oriented_to_raw_bbox(pred_bbox)
+                    tar_bbox = center_bbox_to_raw_bbox(tar_bbox)
+                    print("predicted_object: ", pred_bbox)
+                    print("target_object: ", tar_bbox)
+                target_class = gt_bbox[str(target_id)]['label']
+                print("Target class: ", target_class)
+                '''
+                for gt_id in gt_bbox.keys():
+                    if gt_bbox[gt_id]['label'] == target_class:
+                        print("possible groundtruth_object: ", center_bbox_to_raw_bbox(gt_bbox[gt_id]['bbox']))
+                for fkey in scene.snapshot.keys():
+                    for obj in scene.snapshot_objects[fkey]:
+                        if obj['class_name'] == 'chair': #gt_bbox[str(target_id)]['label']:
+                            print("candidate_detected_object: ", oriented_to_raw_bbox(obj['bbox']))
+                '''
+                # 6 store the results for this query 
+                iou_score = iou_bbox(pred_bbox, tar_bbox, cfg.bbox_oriented)
+            else:
+                iou_score = 0
+            scene_record = update_count(scene_record, iou_score, query)
+            scene_record['acc01'] = scene_record['succ01_count']/(scene_record['overall_count']+1e-06)
+            scene_record['acc025'] = scene_record['succ025_count']/(scene_record['overall_count']+1e-06)
+            print('===================SUMMARY====================')
+            print(scene_record)
+            #scene_record.to_csv(f'{scene_id}_record.csv')
+            scene_record.to_csv(os.path.join(scene_out_dir, 'record.csv'))
             
     
         # 7 summary the results for all queries
-        break
-    return 
+        overall_record[scene_id] = scene_record
+        overall_result = merge_results(cfg.output_dir)
+        
+        
+    return overall_result
 
 
 if __name__ == "__main__":

@@ -2,9 +2,9 @@ exp_name: bbq_debug
 scene_data_dir: /project/pi_chuangg_umass_edu/yuncong/scene_data_scannet_retrieval/
 frame_dir: /project/pi_chuangg_umass_edu/yuncong/OpenEqa/scannet/frames_bbq/
 bbox_data_dir: /project/pi_chuangg_umass_edu/yuncong/OpenEqa/scannet/scannet_bbox_clean.json
+bbox_oriented: False
 annotation_dir: /project/pi_chuangg_umass_edu/yuncong/OpenEqa/scannet/scans
-output_parent_dir: /project/pi_chuangg_umass_edu/yuncong/results/
-
+output_parent_dir: /work/pi_chuangg_umass_edu/yuncong/results/
 
 save_visualization: False
 visualization_dir: vis

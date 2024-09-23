@@ -204,7 +204,7 @@ def get_predicted_object_id(
         print(f"total objects after prefiltering {sum(len(obj_infos) for obj_infos in objects_infos.values())}")
     # Get the predicted object id
     sys_prompt, content = format_prompt(query, snapshots, objects_infos)
-    print(f"the input prompt:\n{sys_prompt + ''.join([c[0] for c in content])}")
+    #print(f"the input prompt:\n{sys_prompt + ''.join([c[0] for c in content])}")
     response = call_openai_api(sys_prompt, content)
     
     # parse the response

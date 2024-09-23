@@ -1,7 +1,8 @@
 import base64
 import numpy as np
+import pandas as pd
 
-def iou_bbox(pred_bbox, tar_bbox, threshold = 0.1, oriented = False):
+def iou_bbox(pred_bbox, tar_bbox, oriented = False):
     
     # 1. compute iou between pred_bbox and tar_bbox
     if not oriented:
@@ -16,8 +17,6 @@ def iou_bbox(pred_bbox, tar_bbox, threshold = 0.1, oriented = False):
     else:
         ...
     # 2. if iou > threshold, return True, else return False
-    print("iou",iou)  
-    #exit(0)
     return iou
 
 def oriented_to_raw_bbox(bbox):
@@ -43,3 +42,43 @@ def raw_bbox_size(bbox):
 def encode_image(image_path):
   with open(image_path, "rb") as image_file:
     return base64.b64encode(image_file.read()).decode('utf-8')
+  
+def initialize_count(mode = "nr3d"):
+  data = {
+    'type': ['overall','easy','hard','view dependent','view independent'],
+    'succ01_count': [0 for i in range(5)],
+    'succ025_count': [0 for i in range(5)],
+    'overall_count': [0 for i in range(5)]
+  }
+  df = pd.DataFrame(data)
+  return df
+    
+def update_count(cur_df, iou, query):
+  success01, success025 = int(iou >= 0.1), int(iou >= 0.25)
+  print(f"iou: {iou}, success01: {success01}, success025: {success025}")
+  cur_df.loc[cur_df['type'] == 'overall','overall_count'] += 1
+  cur_df.loc[cur_df['type'] == 'overall','succ01_count'] += success01
+  cur_df.loc[cur_df['type'] == 'overall','succ025_count'] += success025
+  
+  if query['is_easy']:
+    cur_df.loc[cur_df['type'] == 'easy','overall_count'] += 1
+    cur_df.loc[cur_df['type'] == 'easy','succ01_count'] += success01
+    cur_df.loc[cur_df['type'] == 'easy','succ025_count'] += success025
+  else:
+    cur_df.loc[cur_df['type'] == 'hard','overall_count'] += 1
+    cur_df.loc[cur_df['type'] == 'hard','succ01_count'] += success01
+    cur_df.loc[cur_df['type'] == 'hard','succ025_count'] += success025
+  
+  if query['is_view_dep']:
+    cur_df.loc[cur_df['type'] == 'view dependent','overall_count'] += 1
+    cur_df.loc[cur_df['type'] == 'view dependent','succ01_count'] += success01
+    cur_df.loc[cur_df['type'] == 'view dependent','succ025_count'] += success025
+  else:
+    cur_df.loc[cur_df['type'] == 'view independent','overall_count'] += 1
+    cur_df.loc[cur_df['type'] == 'view independent','succ01_count'] += success01
+    cur_df.loc[cur_df['type'] == 'view independent','succ025_count'] += success025
+  
+  return cur_df
+  
+  
+    

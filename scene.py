@@ -17,16 +17,18 @@ class Scene:
         self.annotation_dir = annotation_dir
         self.snapshot = {}
         self.snapshot_objects = {}
+        '''
         self.visualization_dir = visualization_dir
         if not os.path.exists(self.visualization_dir):
             os.makedirs(self.visualization_dir)
+        '''
         #self.gt_bbox = ...
         #self.detected_bbox = ...
     
     
     def load_scene(self):
         # get snapshot, gt_bbox, detected_bbox
-        snapshot_path = os.path.join(self.scene_dir,"snapshots_inclusive_merged.json")
+        snapshot_path = os.path.join(self.scene_dir,"snapshots_inclusive_merged_yolo.json")
         with open(snapshot_path,'r') as f:
             snapshot_data = json.load(f)
         for frame_key in snapshot_data.keys():
