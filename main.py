@@ -100,7 +100,7 @@ def main(cfg):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-cf", "--cfg_file", help="cfg file path", 
-                        default="cfg/test.yaml", type=str)
+                        default="cfg/test_nr3d.yaml", type=str)
     args = parser.parse_args()
     cfg = OmegaConf.load(args.cfg_file)
     OmegaConf.resolve(cfg)
