@@ -97,14 +97,46 @@ def merge_results(meta_folder):
     
     return sum_records
 
-def reformat_sr3d()
+def reformat_sr3d(src_folder,tar_folder):
+    if not os.path.exists(tar_folder):
+        os.makedirs(tar_folder)
+    scene_id = ['0011_00', '0030_00', '0046_00', '0086_00', '0222_00', '0378_00', '0389_00', '0435_00']
+    scene_id = [f"scene{sid}" for sid in scene_id]
+    for sid in scene_id:
+        target_file = os.path.join(tar_folder, f"{sid}_annotation.json")
+        merged_query = []
+        for subdir in os.listdir(src_folder):
+            if not os.path.isdir(os.path.join(src_folder,subdir)) or subdir[0:5] != 'sr3d+':
+                continue
+            subdir = os.path.join(src_folder, subdir)
+            if subdir == tar_folder:
+                continue
+            query_data = os.path.join(subdir, f"{sid}_annotation.json")
+            if not os.path.exists(query_data):
+                continue
+            with open(query_data, 'r') as f:
+                query_data = json.load(f)
+            relation = subdir.split('_')[-1]
+            for query in query_data:
+                if relation in ['back','front','left','right']:
+                    query['is_view_dep'] = True
+                else:
+                    query['is_view_dep'] = False
+                merged_query.append(query)
+        
+        print(len(merged_query))
+        with open(target_file, 'w') as f:
+            json.dump(merged_query, f, indent = 4)
+            
+            
         
     
-
 if __name__ == "__main__":
     #check_nr3d()
     #check_sr3d()
     
-    merge_results('/work/pi_chuangg_umass_edu/yuncong/results/bbq_debug')
+    #merge_results('/work/pi_chuangg_umass_edu/yuncong/results/bbq_debug')
+    reformat_sr3d('query/scannet_eval/',
+        'query/scannet_eval/sr3d+_all_types_of_queries')
     
     

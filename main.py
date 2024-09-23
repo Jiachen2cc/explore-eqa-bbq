@@ -10,16 +10,15 @@ from statistics import merge_results
 
 
 def main(cfg):
-    
+    print(f"=====================Start {cfg.exp_name}=====================")
     with open(cfg.bbox_data_dir, 'r') as f:
         bbox_data = json.load(f)
         
     overall_record = {}
+    cfg.query_data_dir = f"{cfg.query_data_dir}/{cfg.query_set}_all_types_of_queries"
     # 2 construct the scene
     for scene_dir in os.listdir(cfg.scene_data_dir):
         scene_id = scene_dir.split('-')[-1]
-        if scene_id == 'scene0011_00':
-            continue
         scene_out_dir = os.path.join(cfg.output_dir, scene_id)
         if not os.path.exists(scene_out_dir):
             os.makedirs(scene_out_dir)
@@ -27,13 +26,13 @@ def main(cfg):
         scene_record = initialize_count(cfg.query_set)
         gt_bbox = bbox_data[scene_id]
         scene = Scene(os.path.join(cfg.scene_data_dir, scene_dir),
+                cfg.snapshot_file,
                 os.path.join(cfg.frame_dir, scene_dir),
                 os.path.join(cfg.annotation_dir, scene_id),
                 os.path.join(cfg.output_dir, scene_id, cfg.visualization_dir))
         scene.load_scene()
     
         # 3 get query, snapshot, object_id and format the prompt
-        
         with open(os.path.join(cfg.query_data_dir, f'{scene_id}_annotation.json'), 'r') as f:
             query_data = json.load(f)
         # 4 send prompt to LLM, get the predicted object id

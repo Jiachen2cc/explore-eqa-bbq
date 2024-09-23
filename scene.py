@@ -9,10 +9,12 @@ class Scene:
     
     def __init__(self, 
                 scene_dir,
+                snapshot_file,
                 frame_dir, 
                 annotation_dir,
                 visualization_dir = 'debug'):
         self.scene_dir = scene_dir
+        self.snapshot_file = snapshot_file
         self.frame_dir = frame_dir
         self.annotation_dir = annotation_dir
         self.snapshot = {}
@@ -28,7 +30,7 @@ class Scene:
     
     def load_scene(self):
         # get snapshot, gt_bbox, detected_bbox
-        snapshot_path = os.path.join(self.scene_dir,"snapshots_inclusive_merged_yolo.json")
+        snapshot_path = os.path.join(self.scene_dir,self.snapshot_file)
         with open(snapshot_path,'r') as f:
             snapshot_data = json.load(f)
         for frame_key in snapshot_data.keys():

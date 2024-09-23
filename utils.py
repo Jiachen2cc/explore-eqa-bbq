@@ -1,6 +1,7 @@
 import base64
 import numpy as np
 import pandas as pd
+import json
 
 def iou_bbox(pred_bbox, tar_bbox, oriented = False):
     
@@ -44,12 +45,20 @@ def encode_image(image_path):
     return base64.b64encode(image_file.read()).decode('utf-8')
   
 def initialize_count(mode = "nr3d"):
-  data = {
-    'type': ['overall','easy','hard','view dependent','view independent'],
-    'succ01_count': [0 for i in range(5)],
-    'succ025_count': [0 for i in range(5)],
-    'overall_count': [0 for i in range(5)]
-  }
+  if mode == "nr3d":
+    data = {
+      'type': ['overall','easy','hard','view dependent','view independent'],
+      'succ01_count': [0 for i in range(5)],
+      'succ025_count': [0 for i in range(5)],
+      'overall_count': [0 for i in range(5)]
+    }
+  elif mode == "sr3d+":
+    data = {
+      'type': ['overall','view dependent','view independent'],
+      'succ01_count': 0,
+      'succ025_count': 0,
+      'overall_count': 0
+    }
   df = pd.DataFrame(data)
   return df
     
@@ -60,25 +69,29 @@ def update_count(cur_df, iou, query):
   cur_df.loc[cur_df['type'] == 'overall','succ01_count'] += success01
   cur_df.loc[cur_df['type'] == 'overall','succ025_count'] += success025
   
-  if query['is_easy']:
-    cur_df.loc[cur_df['type'] == 'easy','overall_count'] += 1
-    cur_df.loc[cur_df['type'] == 'easy','succ01_count'] += success01
-    cur_df.loc[cur_df['type'] == 'easy','succ025_count'] += success025
-  else:
-    cur_df.loc[cur_df['type'] == 'hard','overall_count'] += 1
-    cur_df.loc[cur_df['type'] == 'hard','succ01_count'] += success01
-    cur_df.loc[cur_df['type'] == 'hard','succ025_count'] += success025
+  if 'is_easy' in query.keys():
+    if query['is_easy']:
+      cur_df.loc[cur_df['type'] == 'easy','overall_count'] += 1
+      cur_df.loc[cur_df['type'] == 'easy','succ01_count'] += success01
+      cur_df.loc[cur_df['type'] == 'easy','succ025_count'] += success025
+    else:
+      cur_df.loc[cur_df['type'] == 'hard','overall_count'] += 1
+      cur_df.loc[cur_df['type'] == 'hard','succ01_count'] += success01
+      cur_df.loc[cur_df['type'] == 'hard','succ025_count'] += success025
   
-  if query['is_view_dep']:
-    cur_df.loc[cur_df['type'] == 'view dependent','overall_count'] += 1
-    cur_df.loc[cur_df['type'] == 'view dependent','succ01_count'] += success01
-    cur_df.loc[cur_df['type'] == 'view dependent','succ025_count'] += success025
-  else:
-    cur_df.loc[cur_df['type'] == 'view independent','overall_count'] += 1
-    cur_df.loc[cur_df['type'] == 'view independent','succ01_count'] += success01
-    cur_df.loc[cur_df['type'] == 'view independent','succ025_count'] += success025
+  if 'is_view_dep' in query.keys():
+    if query['is_view_dep']:
+      cur_df.loc[cur_df['type'] == 'view dependent','overall_count'] += 1
+      cur_df.loc[cur_df['type'] == 'view dependent','succ01_count'] += success01
+      cur_df.loc[cur_df['type'] == 'view dependent','succ025_count'] += success025
+    else:
+      cur_df.loc[cur_df['type'] == 'view independent','overall_count'] += 1
+      cur_df.loc[cur_df['type'] == 'view independent','succ01_count'] += success01
+      cur_df.loc[cur_df['type'] == 'view independent','succ025_count'] += success025
   
   return cur_df
+
+  
   
   
     

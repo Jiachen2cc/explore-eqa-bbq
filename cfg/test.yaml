@@ -1,14 +1,15 @@
-exp_name: bbq_debug
+exp_name: bbq_debug_new
 scene_data_dir: /project/pi_chuangg_umass_edu/yuncong/scene_data_scannet_retrieval/
 frame_dir: /project/pi_chuangg_umass_edu/yuncong/OpenEqa/scannet/frames_bbq/
 bbox_data_dir: /project/pi_chuangg_umass_edu/yuncong/OpenEqa/scannet/scannet_bbox_clean.json
 bbox_oriented: False
 annotation_dir: /project/pi_chuangg_umass_edu/yuncong/OpenEqa/scannet/scans
 output_parent_dir: /work/pi_chuangg_umass_edu/yuncong/results/
+snapshot_file: snapshots_inclusive_merged_yolo.json
 
 save_visualization: False
 visualization_dir: vis
 
 
-query_set: nr3d #sr3d
-query_data_dir: query/scannet_eval/nr3d_all_types_of_queries
+query_set: sr3d+ #nr3d #sr3d+
+query_data_dir: query/scannet_eval/
