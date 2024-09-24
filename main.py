@@ -48,10 +48,16 @@ def main(cfg):
                 target_id, gt_bbox[str(target_id)]['label']
             )
             '''
-            pred_bbox, frame_key = get_predicted_object_id(
-                query['utterance'], scene.snapshot, scene.snapshot_objects, 
-                True, 5
-            )
+            if cfg.prompt == "one stage":
+                pred_bbox, frame_key = get_predicted_object_id(
+                    query['utterance'], scene.snapshot, scene.snapshot_objects, 
+                    cfg
+                )
+            else:
+                pred_bbox, frame_key = get_predicted_object_id2(
+                    query['utterance'], scene.snapshot, scene.snapshot_objects, 
+                    cfg
+                )
             if pred_bbox is not None:
                 if cfg.save_visualization:
                     scene.check_annonation(frame_key, 
@@ -88,12 +94,11 @@ def main(cfg):
             #scene_record.to_csv(f'{scene_id}_record.csv')
             scene_record.to_csv(os.path.join(scene_out_dir, 'record.csv'))
             
-    
         # 7 summary the results for all queries
         overall_record[scene_id] = scene_record
-        overall_result = merge_results(cfg.output_dir)
-        print('===================OVERALL SUMMARY====================')
-        print(overall_result)
+    overall_result = merge_results(cfg.output_dir)
+    print('===================OVERALL SUMMARY====================')
+    print(overall_result)
         
         
     return overall_result

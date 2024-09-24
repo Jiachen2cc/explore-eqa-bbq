@@ -19,11 +19,10 @@ class Scene:
         self.annotation_dir = annotation_dir
         self.snapshot = {}
         self.snapshot_objects = {}
-        '''
         self.visualization_dir = visualization_dir
         if not os.path.exists(self.visualization_dir):
             os.makedirs(self.visualization_dir)
-        '''
+    
         #self.gt_bbox = ...
         #self.detected_bbox = ...
     

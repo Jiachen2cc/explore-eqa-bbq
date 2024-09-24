@@ -7,7 +7,9 @@ def format_snapshot_prompt(query, snapshots, objects_infos):
     text = "Definitions:\n"
     text += "Snapshot: A focused observation of several objects. Choosing a snapshot means that you are selecting the observed objects in the snapshot as the target objects the user queried.\n"
     text += "Each snapshot would be followed by a list of contained object class names\n"
-    text += "Other objects occured in the snapshot but not listed should not be considered\n"  
+    text += "In this stage, you need to first summarize information from all snapshots\n"
+    text += "For example, if the user query is \'Find the window next to the door\', but no door and window are covisible in the same snapshot, you need to discover their relation across multiple snapshots\n"
+    text += "Then, you should return only ONE snapshot that contains the target object the user queried\n"
     content.append((text,))
     # 2 here is the query
     text = f"Query: Find the object describe as \'{query}\'\n"

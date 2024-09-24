@@ -80,6 +80,9 @@ def format_prefiltering_prompt(
     sys_prompt = "You are an AI agent in a 3D indoor scene.\n"
     prompt = "The goal of the AI agent is to answer questions about the scene through exploration.\n"
     prompt += "To efficiently solve the problem, you should first rank objects in the scene based on their importance.\n"
+    prompt += "You should consider the importance from two aspects: \n"
+    prompt += "1. Is this object may be a direct answer to the question?\n"
+    prompt += "2. Is this object may be a reference object to help answer the question or potentially help you find the answer to the question?\n"
     # prompt += "You should rank the objects based on how well they can help you answer the question.\n"
     # prompt += "More important objects should be more helpful in answering the question, and should be ranked higher and first explored.\n"
     # prompt += f"Only the top {top_k} ranked objects should be included in the response.\n"
@@ -98,7 +101,9 @@ def format_prefiltering_prompt(
     prompt += "Question: What can I use to watch my favorite shows and movies?\n"
     prompt += "Following is a list of objects that you can choose, each object one line\n"
     prompt += "painting\nspeaker\nbox\ncabinet\nlamp\ncouch\npillow\ncabinet\ntv\nbook rack\nwall panel\npainting\nstool\ntv stand\n"
-    prompt += "Answer: tv\ntv stand\nspeaker\n"
+    prompt += "Answer: tv\ntv stand\nspeaker\ncouch\n"
+    prompt += "In this example, tv, tv stand may be the direct answer to the question\n"
+    prompt += "speaker, couch, as they are always close to the tv, can be reference objects to help answer the question\n"
     content.append((prompt,))
     #------------------Task to solve----------------------------
     prompt = f"Following is the concrete content of the task and you should retrieve top {top_k} objects:\n"
@@ -121,6 +126,7 @@ def get_prefiltering_classes(
     top_k=10,
     image_goal = None
 ): 
+    print(f"seen classes: {seen_classes}")
     prefiltering_sys,prefiltering_content = format_prefiltering_prompt(
         question, sorted(list(seen_classes)), top_k=top_k, image_goal=image_goal)
     logging.info("prefiltering prompt: \n", "".join([c[0] for c in prefiltering_content]))
@@ -128,11 +134,24 @@ def get_prefiltering_classes(
     if response is None:
         return []
     # parse the response and return the top_k objects
+    print(f"Prefiltering response: {response}")
     selected_classes = response.strip().split('\n')
+    selected_classes = selected_postprocess(selected_classes)
+    print(f"selected classes: {selected_classes}")
     selected_classes = [cls for cls in selected_classes if cls in seen_classes]
     selected_classes = selected_classes[:top_k]
-    logging.info(f"Prefiltering response: {selected_classes}")
+    print(f"selected classes: {selected_classes}")
     return selected_classes
+
+def selected_postprocess(selected_classes):
+    import re
+    postprocessed_classes = []
+    for scls in selected_classes:
+        scls = re.sub(r'\d', '', scls)
+        scls = re.sub(r'[.,:]', '', scls)
+        scls = scls.strip()
+        postprocessed_classes.append(scls)
+    return postprocessed_classes
 
 def prefilter_snapshot(
     question,
@@ -162,13 +181,17 @@ def prefilter_snapshot(
 def format_prompt(query, snapshots, objects_infos):
     # Format the prompt
     sys_prompt = "Task: You are an agent in an indoor scene tasked with responding queries by observing the surroundings and exploring the environment. you are required to choose the queried object from a Snapshot.\n"
+    #sys_prompt += "To do this, you must first read the query and then explore the scene with all snapshots to find the queried object.\n"
+    #sys_prompt += "Then you need to choose a snapshot and an object from the snapshot to answer the query.\n"
     content = []
     
     # 1 list basic info
     text = "Definitions:\n"
     text += "Snapshot: A focused observation of several objects. Choosing a snapshot means that you are selecting the observed objects in the snapshot as the target objects the user queried.\n"
-    text += "Each snapshot would be followed by a list of object ids and their corresponding descriptions.\n" 
-    text += "You should NOT choose a snapshot if it visually contains the queried object but its object list does not have it\n" 
+    text += "Each snapshot would be followed by a list of object ids, classes and their corresponding descriptions.\n" 
+    text += "You should NOT choose a snapshot if it visually contains the queried object but its object list does not have it.\n" 
+    text += "If the query mentions other reference objects, you can first summarize the relationship between reference objects and target objects across multiple snapshots.\n"
+    text += "But you should only choose ONE snapshot that containing the target object.\n"
     content.append((text,))
     # 2 here is the query
     text = f"Query: Find the object describe as \'{query}\'\n"
@@ -191,23 +214,65 @@ def format_prompt(query, snapshots, objects_infos):
     content.append((text,))
     return sys_prompt, content
 
+def format_prompt_no_class(query, snapshots, objects_infos):
+    # Format the prompt
+    sys_prompt = "Task: You are an agent in an indoor scene tasked with responding queries by observing the surroundings and exploring the environment. you are required to choose the queried object from a Snapshot.\n"
+    #sys_prompt += "To do this, you must first read the query and then explore the scene with all snapshots to find the queried object.\n"
+    #sys_prompt += "Then you need to choose a snapshot and an object from the snapshot to answer the query.\n"
+    content = []
+    
+    # 1 list basic info
+    text = "Definitions:\n"
+    text += "Snapshot: A focused observation of several objects. Choosing a snapshot means that you are selecting the observed objects in the snapshot as the target objects the user queried.\n"
+    text += "Each snapshot would be followed by a list of descriptions of contained objects.\n" 
+    text += "You should NOT choose a snapshot if it visually contains the queried object but its object list does not have it\n" 
+    #text += "If the query mentions other reference objects, you can first summarize the relationship between reference objects and target objects across multiple snapshots\n"
+    #text += "If the query mentions other reference objects, you should better choose a snapshot containing both reference object and target object to help answer the question\n"
+    #text += "But you should only choose ONE snapshot that containing the target object\n"
+    content.append((text,))
+    # 2 here is the query
+    text = f"Query: Find the object describe as \'{query}\'\n"
+    text += "The followings are all the snapshots that you can explore (followed with contained object ids and their descriptions)\n"
+    content.append((text,))
+    for i, frame_key in enumerate(snapshots.keys()):
+        snapshot = snapshots[frame_key]
+        obj_info = objects_infos[frame_key]
+        content.append((f"Snapshot {i} ", snapshot))
+        obj_text = ""
+        for j, obj in enumerate(obj_info):
+            #obj_text += f"Object {j} {obj['class_name']}: {obj['caption']}\n"
+            #obj_text += f"Object {j} {obj['class_name']}, "
+            obj_text += f"Object {j} {obj['caption']}, "
+        obj_text += "\n"
+        content.append((obj_text,))
+    
+    text = "Please choose a snapshot and an object from the snapshot to answer the query.\n"
+    #text += "To approach this query, you can first choose a snapshot and then choose an object from the snapshot based on visual information and text descriptions.\n"
+    text += "The answer should be in the format of 'Snapshot x, Object y', where x is the index of the snapshot and y chosen from the object id following snapshot x\n"
+    text += "'Object y' should be the object queried by the user.\n"
+    text += "Explain the reason for your choice, put it in a new line after the choice.\n"
+    content.append((text,))
+    return sys_prompt, content
+    
 
 def get_predicted_object_id(
     query, 
     snapshots, 
     objects_infos,
-    prefiltering = True,
-    top_k = 5
+    cfg
     ):
     # filter given objects
     print(query)
     print(f"total objects {sum(len(obj_infos) for obj_infos in objects_infos.values())}")
-    if prefiltering:
-        snapshots, objects_infos = prefilter_snapshot(query, snapshots, objects_infos, top_k)
+    if cfg.prefiltering:
+        snapshots, objects_infos = prefilter_snapshot(query, snapshots, objects_infos, cfg.topk)
         print(f"total objects after prefiltering {sum(len(obj_infos) for obj_infos in objects_infos.values())}")
     # Get the predicted object id
-    sys_prompt, content = format_prompt(query, snapshots, objects_infos)
-    #print(f"the input prompt:\n{sys_prompt + ''.join([c[0] for c in content])}")
+    if cfg.with_class:
+        sys_prompt, content = format_prompt(query, snapshots, objects_infos)
+    else:
+        sys_prompt, content = format_prompt_no_class(query, snapshots, objects_infos)
+    print(f"the input prompt:\n{sys_prompt + ''.join([c[0] for c in content])}")
     response = call_openai_api(sys_prompt, content)
     
     # parse the response
@@ -244,6 +309,7 @@ def get_predicted_object_id(
         if object_id[0] == "object" and object_id[1].isdigit() and 0 <= int(object_id[1]) < len(objects_infos[frame_key]):
             object_id = int(object_id[1])
             print("object class name: ", objects_infos[frame_key][object_id]["class_name"])
+            print("object caption: ", objects_infos[frame_key][object_id]["caption"])
             pred_bbox = objects_infos[frame_key][object_id]["bbox"]
         else:
             print("Invalid object response, please try again")
@@ -271,14 +337,13 @@ def get_predicted_object_id2(
     query, 
     snapshots, 
     objects_infos,
-    prefiltering = True,
-    top_k = 5
+    cfg
     ):
     # filter given objects
     print(query)
     print(f"total objects {sum(len(obj_infos) for obj_infos in objects_infos.values())}")
-    if prefiltering:
-        snapshots, objects_infos = prefilter_snapshot(query, snapshots, objects_infos, top_k)
+    if cfg.prefiltering:
+        snapshots, objects_infos = prefilter_snapshot(query, snapshots, objects_infos, cfg.topk)
         print(f"total objects after prefiltering {sum(len(obj_infos) for obj_infos in objects_infos.values())}")
     # Get the predicted object id
     sys_prompt, content = format_snapshot_prompt(query, snapshots, objects_infos)
